@@ -116,7 +116,10 @@ func (i *LogInjector) Write(p []byte) (n int, err error) {
 			}
 			value := gjson.GetBytes(content, "Error")
 			if i.consolelogger != nil {
-				i.consolelogger.Error("SEQ error", zap.String("message", value.String()))
+				i.consolelogger.Error("SEQ error",
+					zap.String("error-message", value.String()),
+					zap.String("raw-content", string(content)),
+					zap.String("content-type", resp.Header.Get("Content-Type")))
 			}
 			return
 		}
