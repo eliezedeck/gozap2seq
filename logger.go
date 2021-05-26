@@ -23,8 +23,11 @@ func NewLogInjector(sequrl, token string) (*LogInjector, error) {
 	if err != nil {
 		return nil, err
 	}
+	if pu.Hostname() == "" {
+		return nil, errors.New("invalid hostname in SEQ URL")
+	}
 
-	furl := pu.Scheme + pu.Hostname() + ":" + pu.Port()
+	furl := pu.Scheme + "://" + pu.Hostname() + ":" + pu.Port()
 	if pu.Port() == "" {
 		furl += "5341"
 	}
