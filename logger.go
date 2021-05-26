@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 
 	"github.com/tidwall/gjson"
 	"go.uber.org/zap"
@@ -17,12 +18,22 @@ type LogInjector struct {
 	seqtoken string
 }
 
-func NewLogInjector(url, token string) *LogInjector {
+func NewLogInjector(sequrl, token string) (*LogInjector, error) {
+	pu, err := url.Parse(sequrl)
+	if err != nil {
+		return nil, err
+	}
+
+	furl := pu.Scheme + pu.Hostname() + ":" + pu.Port()
+	if pu.Port() == "" {
+		furl += "5341"
+	}
+
 	return &LogInjector{
 		client:   &http.Client{},
-		sequrl:   url,
+		sequrl:   furl,
 		seqtoken: token,
-	}
+	}, nil
 }
 
 func (i *LogInjector) Build(zapconfig zap.Config) *zap.Logger {
