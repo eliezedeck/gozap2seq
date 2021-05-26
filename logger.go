@@ -86,7 +86,7 @@ func (i *LogInjector) Write(p []byte) (n int, err error) {
 			return 0, err
 		}
 		value := gjson.GetBytes(content, "Error")
-		return 0, errors.New("upstream error: " + value.String()) // error (with message)
+		return 0, errors.New("SEQ error: " + value.String()) // error (with message)
 	}
 	return len(p), nil // success
 }
