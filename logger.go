@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"runtime"
+	"sync"
 
 	"github.com/tidwall/gjson"
 	"go.uber.org/zap"
@@ -16,6 +18,7 @@ type LogInjector struct {
 	client   *http.Client
 	sequrl   string
 	seqtoken string
+	wg       *sync.WaitGroup
 }
 
 func NewLogInjector(sequrl, token string) (*LogInjector, error) {
@@ -36,6 +39,7 @@ func NewLogInjector(sequrl, token string) (*LogInjector, error) {
 		client:   &http.Client{},
 		sequrl:   furl,
 		seqtoken: token,
+		wg:       &sync.WaitGroup{},
 	}, nil
 }
 
@@ -54,6 +58,9 @@ func (i *LogInjector) Build(zapconfig zap.Config) *zap.Logger {
 }
 
 func (i *LogInjector) Write(p []byte) (n int, err error) {
+	i.wg.Add(1)
+	defer i.wg.Done()
+
 	req, err := http.NewRequest("POST", i.sequrl+"/api/events/raw", bytes.NewBuffer(p))
 	if err != nil {
 		return 0, err
@@ -82,4 +89,9 @@ func (i *LogInjector) Write(p []byte) (n int, err error) {
 		return 0, errors.New("upstream error: " + value.String()) // error (with message)
 	}
 	return len(p), nil // success
+}
+
+func (i *LogInjector) Wait() {
+	runtime.Gosched()
+	i.wg.Wait()
 }

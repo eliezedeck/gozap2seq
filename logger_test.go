@@ -3,7 +3,6 @@ package gozap2seq
 import (
 	"errors"
 	"testing"
-	"time"
 
 	"go.uber.org/zap"
 )
@@ -24,10 +23,10 @@ func TestInjectionIntegration(t *testing.T) {
 	loggerConfig := zap.NewDevelopmentConfig()
 	logger := injector.Build(loggerConfig)
 
-	logger.Debug("Debug message", zap.String("level", "debug"), zap.Bool("ok", true))
-	logger.Info("Info message", zap.String("level", "info"), zap.Binary("binary", []byte("hello")), zap.String("original", "hello"))
-	logger.Warn("Warning message", zap.String("newline", "{\n    \"hello\": \"world\"\n}"))
-	logger.Error("Error message", zap.Error(errors.New("oh no!")))
+	go logger.Debug("Debug message", zap.String("level", "debug"), zap.Bool("ok", true))
+	go logger.Info("Info message", zap.String("level", "info"), zap.Binary("binary", []byte("hello")), zap.String("original", "hello"))
+	go logger.Warn("Warning message", zap.String("newline", "{\n    \"hello\": \"world\"\n}"))
+	go logger.Error("Error message", zap.Error(errors.New("oh no!")))
 
-	time.Sleep(1 * time.Second)
+	injector.Wait()
 }
