@@ -1,4 +1,4 @@
-module gozap2seq
+module github.com/eliezedeck/gozap2seq
 
 go 1.16
 
