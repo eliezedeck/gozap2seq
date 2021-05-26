@@ -50,6 +50,8 @@ func (i *LogInjector) Build(zapconfig zap.Config) *zap.Logger {
 	zapconfig.EncoderConfig.LevelKey = "@l"
 	zapconfig.EncoderConfig.TimeKey = "@t"
 	zapconfig.EncoderConfig.MessageKey = "@mt"
+	zapconfig.EncoderConfig.CallerKey = "caller"
+	zapconfig.EncoderConfig.StacktraceKey = "trace"
 
 	jsonencoder := zapcore.NewJSONEncoder(zapconfig.EncoderConfig)
 	seqsync := zapcore.AddSync(i)
