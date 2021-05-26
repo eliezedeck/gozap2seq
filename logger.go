@@ -6,7 +6,9 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"runtime"
+	"strings"
 	"sync"
 
 	"github.com/tidwall/gjson"
@@ -15,10 +17,11 @@ import (
 )
 
 type LogInjector struct {
-	client   *http.Client
-	sequrl   string
-	seqtoken string
-	wg       *sync.WaitGroup
+	client        *http.Client
+	sequrl        string
+	seqtoken      string
+	consolelogger *zap.Logger // this is used in case of SEQ error
+	wg            *sync.WaitGroup
 }
 
 func NewLogInjector(sequrl, token string) (*LogInjector, error) {
@@ -38,34 +41,44 @@ func NewLogInjector(sequrl, token string) (*LogInjector, error) {
 	return &LogInjector{
 		client:   &http.Client{},
 		sequrl:   furl,
-		seqtoken: token,
+		seqtoken: strings.TrimSpace(token),
 		wg:       &sync.WaitGroup{},
 	}, nil
 }
 
 func (i *LogInjector) Build(zapconfig zap.Config) *zap.Logger {
-	// SEQ requires that the fields and value format follow these rules
-	zapconfig.EncoderConfig.EncodeTime = zapcore.RFC3339NanoTimeEncoder
-	zapconfig.EncoderConfig.EncodeLevel = zapcore.LowercaseLevelEncoder
-	zapconfig.EncoderConfig.LevelKey = "@l"
-	zapconfig.EncoderConfig.TimeKey = "@t"
-	zapconfig.EncoderConfig.MessageKey = "@mt"
-	zapconfig.EncoderConfig.CallerKey = "caller"
-	zapconfig.EncoderConfig.StacktraceKey = "trace"
+	// Create a console logger that will be used if SEQ fails
+	consoleencoder := zapcore.NewConsoleEncoder(zapconfig.EncoderConfig)
+	stderrsync := zapcore.Lock(os.Stderr)
+	i.consolelogger = zap.New(zapcore.NewCore(consoleencoder, stderrsync, zapconfig.Level.Level()))
 
-	jsonencoder := zapcore.NewJSONEncoder(zapconfig.EncoderConfig)
+	configcopy := zapconfig
+
+	// SEQ requires that the fields and value format follow these rules
+	configcopy.EncoderConfig.EncodeTime = zapcore.RFC3339NanoTimeEncoder
+	configcopy.EncoderConfig.EncodeLevel = zapcore.LowercaseLevelEncoder
+	configcopy.EncoderConfig.LevelKey = "@l"
+	configcopy.EncoderConfig.TimeKey = "@t"
+	configcopy.EncoderConfig.MessageKey = "@mt"
+	configcopy.EncoderConfig.CallerKey = "caller"
+	configcopy.EncoderConfig.StacktraceKey = "trace"
+
+	jsonencoder := zapcore.NewJSONEncoder(configcopy.EncoderConfig)
 	seqsync := zapcore.AddSync(i)
 
-	return zap.New(zapcore.NewCore(jsonencoder, seqsync, zapconfig.Level.Level()),
+	return zap.New(zapcore.NewCore(jsonencoder, seqsync, configcopy.Level.Level()),
 		zap.AddCaller(),
 		zap.AddStacktrace(zapcore.PanicLevel))
 }
 
 func (i *LogInjector) Write(p []byte) (n int, err error) {
 	i.wg.Add(1)
-	defer i.wg.Done()
 
-	req, err := http.NewRequest("POST", i.sequrl+"/api/events/raw", bytes.NewBuffer(p))
+	// Since we immediately return, we need to make a copy of the payload that takes time to be sent
+	pcopy := make([]byte, len(p))
+	copy(pcopy, p)
+
+	req, err := http.NewRequest("POST", i.sequrl+"/api/events/raw", bytes.NewBuffer(pcopy))
 	if err != nil {
 		return 0, err
 	}
@@ -75,24 +88,32 @@ func (i *LogInjector) Write(p []byte) (n int, err error) {
 	}
 	req.Header.Set("Content-Type", "application/vnd.serilog.clef")
 
-	// Get the response
-	resp, err := i.client.Do(req)
-	if err != nil {
-		return 0, err
-	}
-	defer resp.Body.Close()
+	go func() {
+		defer i.wg.Done()
 
-	// The status is supposed to be 201 (Created)
-	if resp.StatusCode != 201 {
-		// Parse the JSON message
-		content, err := io.ReadAll(resp.Body)
+		// Get the response
+		resp, err := i.client.Do(req)
 		if err != nil {
-			return 0, err
+			i.consolelogger.Error("Failed reading SEQ response", zap.Error(err))
+			return
 		}
-		value := gjson.GetBytes(content, "Error")
-		return 0, errors.New("SEQ error: " + value.String()) // error (with message)
-	}
-	return len(p), nil // success
+		defer resp.Body.Close()
+
+		// The status is supposed to be 201 (Created)
+		if resp.StatusCode != 201 {
+			// Parse the JSON message
+			content, err := io.ReadAll(resp.Body)
+			if err != nil {
+				i.consolelogger.Error("Failed reading SEQ body", zap.Error(err))
+				return
+			}
+			value := gjson.GetBytes(content, "Error")
+			i.consolelogger.Error("SEQ error", zap.String("message", value.String()))
+			return
+		}
+	}()
+
+	return len(p), nil // always success (but it might have failed)
 }
 
 func (i *LogInjector) Wait() {

@@ -27,4 +27,6 @@ func TestInjectionIntegration(t *testing.T) {
 	logger.Info("Info message", zap.String("level", "info"), zap.Binary("binary", []byte("hello")), zap.String("original", "hello"))
 	logger.Warn("Warning message", zap.String("newline", "{\n    \"hello\": \"world\"\n}"))
 	logger.Error("Error message", zap.Error(errors.New("oh no!")))
+
+	injector.Wait()
 }
