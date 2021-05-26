@@ -20,8 +20,10 @@ type LogInjector struct {
 	client        *http.Client
 	sequrl        string
 	seqtoken      string
-	consolelogger *zap.Logger // this is used in case of SEQ error
+	consolelogger *zap.Logger // this is used in case of SEQ error and EnableFallbackConsoleLogger == true
 	wg            *sync.WaitGroup
+
+	EnableFallbackConsoleLogger bool
 }
 
 func NewLogInjector(sequrl, token string) (*LogInjector, error) {
@@ -47,14 +49,15 @@ func NewLogInjector(sequrl, token string) (*LogInjector, error) {
 }
 
 func (i *LogInjector) Build(zapconfig zap.Config) *zap.Logger {
-	// Create a console logger that will be used if SEQ fails
-	consoleencoder := zapcore.NewConsoleEncoder(zapconfig.EncoderConfig)
-	stderrsync := zapcore.Lock(os.Stderr)
-	i.consolelogger = zap.New(zapcore.NewCore(consoleencoder, stderrsync, zapconfig.Level.Level()))
-
-	configcopy := zapconfig
+	if i.EnableFallbackConsoleLogger {
+		// Create a console logger that will be used if SEQ fails
+		consoleencoder := zapcore.NewConsoleEncoder(zapconfig.EncoderConfig)
+		stderrsync := zapcore.Lock(os.Stderr)
+		i.consolelogger = zap.New(zapcore.NewCore(consoleencoder, stderrsync, zapconfig.Level.Level()))
+	}
 
 	// SEQ requires that the fields and value format follow these rules
+	configcopy := zapconfig
 	configcopy.EncoderConfig.EncodeTime = zapcore.RFC3339NanoTimeEncoder
 	configcopy.EncoderConfig.EncodeLevel = zapcore.LowercaseLevelEncoder
 	configcopy.EncoderConfig.LevelKey = "@l"
@@ -94,7 +97,9 @@ func (i *LogInjector) Write(p []byte) (n int, err error) {
 		// Get the response
 		resp, err := i.client.Do(req)
 		if err != nil {
-			i.consolelogger.Error("Failed reading SEQ response", zap.Error(err))
+			if i.consolelogger != nil {
+				i.consolelogger.Error("Failed reading SEQ response", zap.Error(err))
+			}
 			return
 		}
 		defer resp.Body.Close()
@@ -104,11 +109,15 @@ func (i *LogInjector) Write(p []byte) (n int, err error) {
 			// Parse the JSON message
 			content, err := io.ReadAll(resp.Body)
 			if err != nil {
-				i.consolelogger.Error("Failed reading SEQ body", zap.Error(err))
+				if i.consolelogger != nil {
+					i.consolelogger.Error("Failed reading SEQ body", zap.Error(err))
+				}
 				return
 			}
 			value := gjson.GetBytes(content, "Error")
-			i.consolelogger.Error("SEQ error", zap.String("message", value.String()))
+			if i.consolelogger != nil {
+				i.consolelogger.Error("SEQ error", zap.String("message", value.String()))
+			}
 			return
 		}
 	}()
