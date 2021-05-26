@@ -45,7 +45,7 @@ func (i *LogInjector) Build(zapconfig zap.Config) *zap.Logger {
 	zapconfig.EncoderConfig.EncodeLevel = zapcore.LowercaseLevelEncoder
 	zapconfig.EncoderConfig.LevelKey = "@l"
 	zapconfig.EncoderConfig.TimeKey = "@t"
-	zapconfig.EncoderConfig.MessageKey = "&mt"
+	zapconfig.EncoderConfig.MessageKey = "@mt"
 
 	jsonencoder := zapcore.NewJSONEncoder(zapconfig.EncoderConfig)
 	seqsync := zapcore.AddSync(i)
