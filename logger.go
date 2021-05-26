@@ -71,7 +71,8 @@ func (i *LogInjector) Write(p []byte) (n int, err error) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
+	// The status is supposed to be 201 (Created)
+	if resp.StatusCode != 201 {
 		// Parse the JSON message
 		content, err := io.ReadAll(resp.Body)
 		if err != nil {
