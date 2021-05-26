@@ -23,10 +23,8 @@ func TestInjectionIntegration(t *testing.T) {
 	loggerConfig := zap.NewDevelopmentConfig()
 	logger := injector.Build(loggerConfig)
 
-	go logger.Debug("Debug message", zap.String("level", "debug"), zap.Bool("ok", true))
-	go logger.Info("Info message", zap.String("level", "info"), zap.Binary("binary", []byte("hello")), zap.String("original", "hello"))
-	go logger.Warn("Warning message", zap.String("newline", "{\n    \"hello\": \"world\"\n}"))
-	go logger.Error("Error message", zap.Error(errors.New("oh no!")))
-
-	injector.Wait()
+	logger.Debug("Debug message", zap.String("level", "debug"), zap.Bool("ok", true))
+	logger.Info("Info message", zap.String("level", "info"), zap.Binary("binary", []byte("hello")), zap.String("original", "hello"))
+	logger.Warn("Warning message", zap.String("newline", "{\n    \"hello\": \"world\"\n}"))
+	logger.Error("Error message", zap.Error(errors.New("oh no!")))
 }

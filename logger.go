@@ -54,7 +54,9 @@ func (i *LogInjector) Build(zapconfig zap.Config) *zap.Logger {
 	jsonencoder := zapcore.NewJSONEncoder(zapconfig.EncoderConfig)
 	seqsync := zapcore.AddSync(i)
 
-	return zap.New(zapcore.NewCore(jsonencoder, seqsync, zapconfig.Level.Level()))
+	return zap.New(zapcore.NewCore(jsonencoder, seqsync, zapconfig.Level.Level()),
+		zap.AddCaller(),
+		zap.AddStacktrace(zapcore.PanicLevel))
 }
 
 func (i *LogInjector) Write(p []byte) (n int, err error) {
